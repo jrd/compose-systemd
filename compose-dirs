@@ -1,0 +1,206 @@
+#!/bin/bash
+[ -f /etc/compose-dirs.conf ] || exit 1
+. /etc/compose-dirs.conf
+[ -d $compose_dir ] || exit 1
+cd $compose_dir
+action="$1"
+shift
+usage() {
+  cat <<EOF
+By Cyrille Pontvieux, 2019, MIT licence
+
+compose-dirs [install|update|start|stop|restart|status] [-v|-h]
+
+CONFIG:
+  compose directory: $compose_dir
+  compose user: $compose_user
+  systemd base service name: $tmpl_name@.service
+  dependencies file: $compose_dir/$deps_file
+
+DEPS FORMAT:
+ compose_to_run:compose_dep_1,compose_dep_2
+EOF
+}
+if [ -z "$action" ]; then
+  usage >&2
+  exit 1
+fi
+if [ "$action" == "-h" ] || [ "$action" == "--help" ]; then
+  usage
+  exit 0
+fi
+install_template() {
+  set -e
+  [ $(id -u) -eq 0 ]
+  dc=$(which docker-compose)
+  cat > "/etc/systemd/system/$tmpl_name@.service" <<EOF
+[Unit]
+Description=Service for docker-compose in %I
+BindsTo=docker.service
+After=docker.service
+
+[Service]
+Type=simple
+ProtectSystem=yes
+ProtectHome=yes
+User=$compose_user
+WorkingDirectory=$compose_dir/%I
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=compose-%i
+SyslogLevel=debug
+SyslogLevelPrefix=false
+ExecStart=$dc up
+ExecStop=$dc down
+TimeoutStartSec=infinity
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=1min
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+}
+find_loaded_instances() {
+  systemctl list-units --state=loaded | sed -rn "/^$tmpl_name"'@.*\.service .*/{s/.*@(.*)\.service.*/\1/p}'
+}
+find_instances() {
+  cut -d: -f1 $deps_file
+}
+find_instances_to_update() {
+  to_delete=""
+  to_update=""
+  loaded_instances="$(find_loaded_instances)"
+  instances="$(find_instances)"
+  for i in $loaded_instances; do
+    if ! echo "$instances" | grep -q "^$i\$"; then
+      to_delete="$to_delete $i"
+    fi
+  done
+  for i in $instances; do
+    to_update="$to_update $i"
+  done
+  echo "$to_delete:$to_update"
+}
+find_instance_deps() {
+  grep -F "$1:" $deps_file | cut -d: -f2
+}
+update() {
+  set -e
+  [ $(id -u) -eq 0 ]
+  instances=$(find_instances_to_update)
+  to_delete=$(echo "$instances" | cut -d: -f1)
+  to_update=$(echo "$instances" | cut -d: -f2)
+  for i in $to_delete; do
+    systemctl disable "$tmpl_name@$i.service"
+  done
+  for i in $to_update; do
+    deps=$(find_instance_deps $i | tr ',' ' ')
+    confd="/etc/systemd/system/$tmpl_name@$i.service.d"
+    rm -rf "$confd" 2>/dev/null || true
+    if [ -n "$deps" ]; then
+      mkdir -p "$confd"
+      requires=""
+      afters="docker.service"
+      for dep in $deps; do
+        [ -n "$requires" ] && sep=" " || sep=""
+        requires="$requires$sep$tmpl_name@$dep.service"
+        afters="$afters $tmpl_name@$dep.service"
+      done
+      cat > "$confd/deps.conf" <<EOF
+[Unit]
+Requires=$requires
+After=$afters
+EOF
+    fi
+    systemctl enable "$tmpl_name@$i.service"
+  done
+}
+find_order() {
+  python - $compose_dir/$deps_file <<'EOF'
+from sys import argv
+deps_file = argv[1]
+lines = map(lambda l: l.rstrip(), list(open(deps_file)))
+
+
+def order_deps_first(lines):
+    tree = dict([line.split(':') for line in lines])
+    prev_svc = []
+    new_lines = []
+    for svc, deps in tree.items():
+        if svc not in prev_svc:
+            if deps:
+                for dep in deps.split(','):
+                    if dep not in prev_svc:
+                        prev_svc.append(dep)
+                        new_lines.append(':'.join([dep, tree[dep]]))
+            prev_svc.append(svc)
+            new_lines.append(':'.join([svc, deps]))
+    return new_lines
+
+
+while True:
+    ordered_lines = order_deps_first(lines)
+    if ordered_lines == lines:
+        break
+    else:
+        lines = ordered_lines
+for line in lines:
+    print(line)
+EOF
+}
+start_all() {
+  set -e
+  [ $(id -u) -eq 0 ]
+  for i in $(find_order | cut -d: -f1); do
+    echo "Starting $tmpl_name@$i"
+    systemctl start "$tmpl_name@$i.service"
+  done
+}
+stop_all() {
+  set -e
+  [ $(id -u) -eq 0 ]
+  for i in $(find_order | cut -d: -f1 | tac); do
+    echo "Stopping $tmpl_name@$i"
+    systemctl stop "$tmpl_name@$i.service"
+  done
+}
+status_all() {
+  [ "$1" = "-v" ] && verbose=1
+  instances="$(find_instances)"
+  for i in $instances; do
+    systemctl status --no-pager "$tmpl_name@$i.service"
+  done
+  if [ -n "$verbose" ]; then
+    for i in $instances; do
+      cd $compose_dir/$i && docker-compose ps
+    done
+  fi
+}
+case "$action" in
+  install)
+    install_template "$@"
+    ;;
+  update)
+    update "$@"
+    ;;
+  start)
+    start_all "$@"
+    ;;
+  stop)
+    stop_all "$@"
+    ;;
+  restart)
+    stop_all "$@"
+    sleep 3
+    start_all "$@"
+    ;;
+  status)
+    status_all "$@"
+    ;;
+  *)
+    usage >&2
+    exit 1
+    ;;
+esac
