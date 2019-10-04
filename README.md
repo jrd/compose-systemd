@@ -5,14 +5,14 @@ This script is used to install and manage docker compose projects with systemd.
 
 A semi-automatic dependency mechanism is available.
 
-This can be used to automatically start the different compose services in the correct order.
+This can be used to automatically start the different compose services in the correct order (but no waiting for availability is done, as containers in a compose file).
 
 Configuration
 -------------
 
-You need to copy `compose-dirs.conf` in `/etc/` and `compose-dirs` in `/usr/local/bin/`.
+You need to copy `compose-dirs.conf` in `/etc/` and `compose-dirs` in `/usr/local/bin/` or any directory in your `PATH`
 
-Edit `/etc/compose-dirs.conf` file to adjust for the wanted configuration.
+Edit `/etc/compose-dirs.conf` file to adjust configuration to your liking.
 
 By default, the following configuration is:
 * compose directory: `/etc/docker-compose`
@@ -36,10 +36,13 @@ compose_4:compose_2
 Installation
 ------------
 
-Create you compose project in `/etc/docker-compose`, fill in the `dirs.deps` file, and then ask for installation:
+Install the Systemd service template:
 ```
 compose-dirs install
 ```
+
+Usage
+-----
 
 Every time you modify a compose project or a dependency, just run:
 ```
@@ -52,4 +55,5 @@ compose-dirs start
 ```
 
 There are also `stop`, `restart` and `status` commands.
+
 Use `-h` or `--help` to get help.
