@@ -63,7 +63,7 @@ EOF
   systemctl daemon-reload
 }
 find_loaded_instances() {
-  systemctl list-units --state=loaded | sed -rn "/^$tmpl_name"'@.*\.service .*/{s/.*@(.*)\.service.*/\1/p}'
+  systemctl list-units --state=loaded | grep "^$tmpl_name@.*\.service " | awk '{print $1}' | xargs -i@ systemd-escape -u --instance "@"
 }
 find_instances() {
   cut -d: -f1 $deps_file
@@ -93,11 +93,12 @@ update() {
   to_delete=$(echo "$instances" | cut -d: -f1)
   to_update=$(echo "$instances" | cut -d: -f2)
   for i in $to_delete; do
-    systemctl disable "$tmpl_name@$i.service"
+    systemctl disable "$tmpl_name@$(systemd-escape --suffix service "$i")"
   done
   for i in $to_update; do
     deps=$(find_instance_deps $i | tr ',' ' ')
-    confd="/etc/systemd/system/$tmpl_name@$i.service.d"
+    i_escaped=$(systemd-escape "$i")
+    confd="/etc/systemd/system/$tmpl_name@$i_escape.service.d"
     rm -rf "$confd" 2>/dev/null || true
     if [ -n "$deps" ]; then
       mkdir -p "$confd"
@@ -105,8 +106,9 @@ update() {
       afters="docker.service"
       for dep in $deps; do
         [ -n "$requires" ] && sep=" " || sep=""
-        requires="$requires$sep$tmpl_name@$dep.service"
-        afters="$afters $tmpl_name@$dep.service"
+        dep_escaped=$(systemd-escape "$dep")
+        requires="$requires$sep$tmpl_name@$dep_escaped.service"
+        afters="$afters $tmpl_name@$dep_escaped.service"
       done
       cat > "$confd/deps.conf" <<EOF
 [Unit]
@@ -114,7 +116,7 @@ Requires=$requires
 After=$afters
 EOF
     fi
-    systemctl enable "$tmpl_name@$i.service"
+    systemctl enable "$tmpl_name@$(systemd-escape --suffix service "$i")"
   done
 }
 find_order() {
@@ -153,7 +155,7 @@ EOF
 start_all() {
   set -e
   [ $(id -u) -eq 0 ]
-  for i in $(find_order | cut -d: -f1); do
+  for i in $(find_order | cut -d: -f1 | xargs -i@ systemd-escape "@"); do
     echo "Starting $tmpl_name@$i"
     systemctl start "$tmpl_name@$i.service"
   done
@@ -161,7 +163,7 @@ start_all() {
 stop_all() {
   set -e
   [ $(id -u) -eq 0 ]
-  for i in $(find_order | cut -d: -f1 | tac); do
+  for i in $(find_order | cut -d: -f1 | xargs -i@ systemd-escape "@" | tac); do
     echo "Stopping $tmpl_name@$i"
     systemctl stop "$tmpl_name@$i.service"
   done
@@ -170,7 +172,7 @@ status_all() {
   [ "$1" = "-v" ] && verbose=1
   instances="$(find_instances)"
   for i in $instances; do
-    systemctl status --no-pager "$tmpl_name@$i.service"
+    systemctl status --no-pager "$tmpl_name@$(systemd-escape "$i").service"
   done
   if [ -n "$verbose" ]; then
     for i in $instances; do
