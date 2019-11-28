@@ -7,7 +7,7 @@ action="$1"
 shift
 usage() {
   cat <<EOF
-By Cyrille Pontvieux, 2019, MIT licence
+Version 1.1.0. By Cyrille Pontvieux, 2019, MIT licence
 
 compose-dirs [install|update|start|stop|restart|status] [-v|-h]
 
@@ -66,7 +66,7 @@ find_loaded_instances() {
   systemctl list-units --state=loaded | grep "^$tmpl_name@.*\.service " | awk '{print $1}' | xargs -i@ systemd-escape -u --instance "@"
 }
 find_instances() {
-  cut -d: -f1 $deps_file
+  cut -d: -f1 $compose_dir/$deps_file
 }
 find_instances_to_update() {
   to_delete=""
@@ -84,7 +84,7 @@ find_instances_to_update() {
   echo "$to_delete:$to_update"
 }
 find_instance_deps() {
-  grep -F "$1:" $deps_file | cut -d: -f2
+  grep -F "$1:" $compose_dir/$deps_file | cut -d: -f2
 }
 update() {
   set -e

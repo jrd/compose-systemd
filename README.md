@@ -15,13 +15,13 @@ You need to copy `compose-dirs.conf` in `/etc/` and `compose-dirs` in `/usr/loca
 Edit `/etc/compose-dirs.conf` file to adjust configuration to your liking.
 
 By default, the following configuration is:
-* compose directory: `/etc/docker-compose`
-* compose user: `root`
+* compose directory: `/etc/compose`
+* compose user: `compose`
 * systemd base service name: `compose@.service`
-* dependencies file: `/etc/docker-compose/dirs.deps`
+* dependencies file: `/etc/compose/compose.deps`
 
-`dirs.deps` format
-------------------
+`compose.deps` format
+---------------------
 
 This file specify one compose directory per line, following by a colon and a coma separated list of compose directories dependencies.
 
