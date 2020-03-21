@@ -20,6 +20,14 @@ By default, the following configuration is:
 * systemd base service name: `compose@.service`
 * dependencies file: `/etc/compose/compose.deps`
 
+Dependencies:
+* bash
+* systemd
+* docker-compose
+* python3
+* coreutils
+* findutils
+
 `compose.deps` format
 ---------------------
 

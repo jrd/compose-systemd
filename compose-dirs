@@ -7,7 +7,7 @@ action="$1"
 shift
 usage() {
   cat <<EOF
-Version 1.1.0. By Cyrille Pontvieux, 2019, MIT licence
+Version 1.2.0. By Cyrille Pontvieux, 2020, MIT licence
 
 compose-dirs [install|update|start|stop|restart|status] [-v|-h]
 
@@ -120,7 +120,7 @@ EOF
   done
 }
 find_order() {
-  python - $compose_dir/$deps_file <<'EOF'
+  python3 - $compose_dir/$deps_file <<'EOF'
 from sys import argv
 deps_file = argv[1]
 lines = map(lambda l: l.rstrip(), list(open(deps_file)))
