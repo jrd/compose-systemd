@@ -7,7 +7,7 @@ action="$1"
 shift
 usage() {
   cat <<EOF
-Version 1.2.0. By Cyrille Pontvieux, 2020, MIT licence
+Version 1.3.0. By Cyrille Pontvieux, 2020-2021, MIT licence
 
 compose-dirs [install|update|start|stop|restart|status] [-v|-h]
 
@@ -50,8 +50,8 @@ StandardError=journal
 SyslogIdentifier=compose-%i
 SyslogLevel=debug
 SyslogLevelPrefix=false
-ExecStart=$dc up --no-color --remove-orphans
-ExecStop=$dc down
+ExecStart=@$dc compose-%i up --no-color --remove-orphans
+ExecStop=@$dc compose-%i down
 TimeoutStartSec=infinity
 Restart=on-failure
 RestartSec=5
