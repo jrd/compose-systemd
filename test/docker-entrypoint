@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+. /etc/compose-dirs.conf
+mkdir -p "$compose_dir"
+touch "$compose_dir/$deps_file"
+echo "Passing exec to systemd"
+exec /lib/systemd/systemd

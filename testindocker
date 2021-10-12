@@ -1,0 +1,32 @@
+#!/bin/bash
+set -e
+(
+    cp compose-dirs* test/
+    cd test
+    DOCKER_BUILDKIT=1 docker build --network host -t composetest .
+    rm compose-dirs*
+)
+cat <<'EOF'
+`compose-dirs` will run in a container.
+You can reach the container with `docker exec -ti composetest /bin/bash`.
+`tmux` is available in the container so feel free to use it.
+
+The following ports are binded (local → container):
+    1022 → 22 (ssh)
+You can ssh with:
+    ssh -p 1022 root@127.0.0.1
+Password is root
+EOF
+trap 'docker kill composetest; docker rmi composetest' EXIT
+docker run \
+    --name composetest \
+    --rm \
+    --privileged \
+    -p 1022:22 \
+    -d \
+    composetest
+echo "Wait for systemd to start"
+sleep 1
+docker exec -t composetest systemctl enable --now ssh
+docker exec -t composetest /usr/local/bin/compose-dirs install
+docker logs -f composetest

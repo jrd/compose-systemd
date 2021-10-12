@@ -56,12 +56,24 @@ Every time you modify a compose project or a dependency, just run:
 ```
 compose-dirs update
 ```
+or run:
+```
+compose-dirs update your_application
+```
 
 You can then start the whole chain with:
 ```
 compose-dirs start
 ```
+Or just your application with:
+```
+compose-dirs start your_application
+```
 
 There are also `stop`, `restart` and `status` commands.
 
 Use `-h` or `--help` to get help.
+
+Use `-v` or `--verbose` to get verbose output.
+
+Use `-V` or `--version` to show compose-dirs version.

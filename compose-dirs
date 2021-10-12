@@ -1,15 +1,26 @@
 #!/bin/bash
-[ -f /etc/compose-dirs.conf ] || exit 1
-. /etc/compose-dirs.conf
-[ -d $compose_dir ] || exit 1
-cd $compose_dir
-action="$1"
-shift
+# vim: set ts=2 sts=2 sw=2:
+version=1.4.0
+conf=/etc/compose-dirs.conf
+[ -f "$conf" ] || exit 1
+# shellcheck disable=SC1090,SC1091
+. "$conf"
+[ -n "$compose_dir" ] && [ -n "$compose_user" ] && [ -n "$tmpl_name" ] && [ -n "$deps_file" ] || exit 1
+[ -d "$compose_dir" ] || exit 1
+cd "$compose_dir"
 usage() {
   cat <<EOF
-Version 1.3.0. By Cyrille Pontvieux, 2020-2021, MIT licence
+Version $version. By Cyrille Pontvieux, 2020-2021, MIT licence
 
-compose-dirs [install|update|start|stop|restart|status] [-v|-h]
+compose-dirs install OPTIONS ACTION [OPTS]
+OPTIONS:
+  -h, --help: this help message
+  -V, --version: show version
+  -v, --verbose: verbose output
+ACTION:
+  install: install compose-dirs on the system
+  update [service]: update systemd unit files (or just the service provided)
+  start, stop, restart, status [service]: do the acton on all (or only provided service) systemd unit files
 
 CONFIG:
   compose directory: $compose_dir
@@ -21,16 +32,9 @@ DEPS FORMAT:
  compose_to_run:compose_dep_1,compose_dep_2
 EOF
 }
-if [ -z "$action" ]; then
-  usage >&2
-  exit 1
-fi
-if [ "$action" == "-h" ] || [ "$action" == "--help" ]; then
-  usage
-  exit 0
-fi
 install_template() {
   set -e
+  # shellcheck disable=SC2046
   [ $(id -u) -eq 0 ]
   dc=$(which docker-compose)
   cat > "/etc/systemd/system/$tmpl_name@.service" <<EOF
@@ -63,42 +67,58 @@ EOF
   systemctl daemon-reload
 }
 find_loaded_instances() {
-  systemctl list-units --state=loaded | grep "^$tmpl_name@.*\.service " | awk '{print $1}' | xargs -i@ systemd-escape -u --instance "@"
+  systemctl list-units -q --plain --no-legend --state=loaded --type=service "$tmpl_name@*" | cut -d' ' -f1 | xargs -I @ systemd-escape -u --instance "@"
 }
 find_instances() {
-  cut -d: -f1 $compose_dir/$deps_file
+  cut -d: -f1 "$compose_dir/$deps_file"
+}
+find_instance_deps() {
+  grep "^$1:" "$compose_dir/$deps_file" | cut -d: -f2 | tr ',' '\n' | sort
 }
 find_instances_to_update() {
+  limited_instances="$1"
   to_delete=""
   to_update=""
   loaded_instances="$(find_loaded_instances)"
   instances="$(find_instances)"
+  if [ -n "$limited_instances" ]; then
+    loaded_instances=$(for inst in $loaded_instances; do echo "$limited_instances" | grep -q "^$inst\$" && echo "$inst"; done)
+    instances=$(for inst in $instances; do echo "$limited_instances" | grep -q "^$inst\$" && echo "$inst"; done)
+  fi
   for i in $loaded_instances; do
     if ! echo "$instances" | grep -q "^$i\$"; then
       to_delete="$to_delete $i"
     fi
   done
   for i in $instances; do
-    to_update="$to_update $i"
+    i_escaped=$(systemd-escape "$i")
+    defined_deps=$(find_instance_deps "$i")
+    actual_deps=$(systemctl list-dependencies -q --plain --no-legend "$tmpl_name@$i_escaped.service" | sed -rn "/ *$tmpl_name@/{s/ *$tmpl_name@(.*)\.service/\1/;p}" | sort)
+    if [ "$defined_deps" != "$actual_deps" ]; then
+      to_update="$to_update $i"
+    fi
   done
   echo "$to_delete:$to_update"
 }
-find_instance_deps() {
-  grep -F "$1:" $compose_dir/$deps_file | cut -d: -f2
-}
 update() {
   set -e
+  # shellcheck disable=SC2046
   [ $(id -u) -eq 0 ]
-  instances=$(find_instances_to_update)
+  instances=$(find_instances_to_update "$opts")
   to_delete=$(echo "$instances" | cut -d: -f1)
   to_update=$(echo "$instances" | cut -d: -f2)
   for i in $to_delete; do
-    systemctl disable "$tmpl_name@$(systemd-escape --suffix service "$i")"
+    i_escaped=$(systemd-escape "$i")
+    systemctl disable --no-reload "$tmpl_name@$i_escaped.service"
+    confd="/etc/systemd/system/$tmpl_name@$i_escaped.service.d"
+    if [ -d "$confd" ]; then
+      rm -rf "$confd"
+    fi
   done
   for i in $to_update; do
-    deps=$(find_instance_deps $i | tr ',' ' ')
+    deps=$(find_instance_deps "$i")
     i_escaped=$(systemd-escape "$i")
-    confd="/etc/systemd/system/$tmpl_name@$i_escape.service.d"
+    confd="/etc/systemd/system/$tmpl_name@$i_escaped.service.d"
     rm -rf "$confd" 2>/dev/null || true
     if [ -n "$deps" ]; then
       mkdir -p "$confd"
@@ -116,11 +136,12 @@ Requires=$requires
 After=$afters
 EOF
     fi
-    systemctl enable "$tmpl_name@$(systemd-escape --suffix service "$i")"
+    systemctl enable --no-reload "$tmpl_name@$i_escaped.service"
   done
+  systemctl daemon-reload
 }
 find_order() {
-  python3 - $compose_dir/$deps_file <<'EOF'
+  python3 - "$compose_dir/$deps_file" <<'EOF'
 from sys import argv
 deps_file = argv[1]
 lines = map(lambda l: l.rstrip(), list(open(deps_file)))
@@ -152,54 +173,94 @@ for line in lines:
     print(line)
 EOF
 }
-start_all() {
+start() {
   set -e
+  # shellcheck disable=SC2046
   [ $(id -u) -eq 0 ]
-  for i in $(find_order | cut -d: -f1 | xargs -i@ systemd-escape "@"); do
-    echo "Starting $tmpl_name@$i"
-    systemctl start "$tmpl_name@$i.service"
-  done
-}
-stop_all() {
-  set -e
-  [ $(id -u) -eq 0 ]
-  for i in $(find_order | cut -d: -f1 | xargs -i@ systemd-escape "@" | tac); do
-    echo "Stopping $tmpl_name@$i"
-    systemctl stop "$tmpl_name@$i.service"
-  done
-}
-status_all() {
-  [ "$1" = "-v" ] && verbose=1
-  instances="$(find_instances)"
-  for i in $instances; do
-    systemctl status --no-pager "$tmpl_name@$(systemd-escape "$i").service"
-  done
-  if [ -n "$verbose" ]; then
-    for i in $instances; do
-      cd $compose_dir/$i && docker-compose ps
+  if [ -n "$opts" ]; then
+    for i in $opts; do
+      [ -n "$verbose" ] && echo "Starting $tmpl_name@$i" || true
+      systemctl start --no-block "$tmpl_name@$i.service"
+    done
+  else
+    for i in $(find_order | cut -d: -f1 | xargs -I @ systemd-escape "@"); do
+      [ -n "$verbose" ] && echo "Starting $tmpl_name@$i" || true
+      systemctl start --no-block "$tmpl_name@$i.service"
     done
   fi
 }
+stop() {
+  set -e
+  # shellcheck disable=SC2046
+  [ $(id -u) -eq 0 ]
+  if [ -n "$opts" ]; then
+    for i in $opts; do
+      [ -n "$verbose" ] && echo "Stopping $tmpl_name@$i" || true
+      systemctl stop --no-block "$tmpl_name@$i.service"
+    done
+  else
+    for i in $(find_order | cut -d: -f1 | xargs -I @ systemd-escape "@" | tac); do
+      [ -n "$verbose" ] && echo "Stopping $tmpl_name@$i" || true
+      systemctl stop --no-block "$tmpl_name@$i.service"
+    done
+  fi
+}
+status() {
+  if [ -n "$opts" ]; then
+    instances="$opts"
+  else
+    instances="$(find_instances)"
+  fi
+  [ -n "$verbose" ] && lines=10 || lines=0
+  for i in $instances; do
+    systemctl status --no-pager --lines=$lines -o cat "$tmpl_name@$(systemd-escape "$i").service"
+    if [ -n "$verbose" ]; then
+      (cd "$compose_dir/$i" && docker-compose ps)
+    fi
+  done
+}
+verbose=0
+action=
+opts=
+while [ -n "$1" ]; do
+  arg="$1"; shift
+  if [ "$arg" == "-h" ] || [ "$arg" == "--help" ]; then
+    usage
+    exit 0
+  elif [ "$arg" == "-V" ] || [ "$arg" == "--version" ]; then
+    echo "$version"
+    exit 0
+  elif [ "$arg" == "-v" ] || [ "$arg" == "--verbose" ]; then
+    verbose=1
+  fi
+  if [ -z "$action" ]; then
+    action="$arg"
+  elif [ -z "$opts" ]; then
+    opts="$arg"
+  else
+    opts="$opts $arg"
+  fi
+done
 case "$action" in
   install)
-    install_template "$@"
+    install_template
     ;;
   update)
-    update "$@"
+    update
     ;;
   start)
-    start_all "$@"
+    start
     ;;
   stop)
-    stop_all "$@"
+    stop
     ;;
   restart)
-    stop_all "$@"
+    stop
     sleep 3
-    start_all "$@"
+    start
     ;;
   status)
-    status_all "$@"
+    status
     ;;
   *)
     usage >&2
