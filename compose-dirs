@@ -38,6 +38,49 @@ DEPS FORMAT:
  compose_to_run:compose_dep_1,compose_dep_2
 EOF
 }
+install_wait_for_cpu_idle() {
+  set -e
+  # shellcheck disable=SC2046
+  [ $(id -u) -eq 0 ]
+  mkdir -p /usr/local/bin
+  cat > /usr/local/bin/wait-for-cpu-idle <<'EOF'
+#!/usr/bin/env python3
+from os import execvp, cpu_count, getloadavg
+from random import randint
+from sys import argv, exit, stderr
+from time import sleep
+
+THRESHOLD = 0.6
+DELAY_SEC = 10
+MAX_DELAY_SEC = 60 * 5
+NB_PROC = cpu_count()
+
+
+def get_cpu_load() -> float:
+    return getloadavg()[0] / NB_PROC
+
+
+args = argv[1:]
+total_delay = 0
+pre_sleep = randint(DELAY_SEC // 2, 2 * DELAY_SEC)
+print(f"Waiting {pre_sleep} seconds")
+sleep(pre_sleep)
+total_delay += pre_sleep
+cpu_load = get_cpu_load()
+while total_delay < MAX_DELAY_SEC and cpu_load > THRESHOLD:
+    print(f"Average CPU load too high ({cpu_load} > {THRESHOLD})")
+    print(f"Delay ({DELAY_SEC}\") starting {args}")
+    sleep(DELAY_SEC)
+    total_delay += DELAY_SEC
+    cpu_load = get_cpu_load()
+if total_delay < MAX_DELAY_SEC:
+    execvp(args[0], args)
+else:
+    print(f"Max delay of {MAX_DELAY_SEC}\" exceeded, exit with error", file=stderr)
+    exit(1)
+EOF
+  chmod +x /usr/local/bin/wait-for-cpu-idle
+}
 install_template() {
   set -e
   # shellcheck disable=SC2046
@@ -59,21 +102,23 @@ StandardError=journal
 SyslogIdentifier=compose-%i
 SyslogLevel=debug
 SyslogLevelPrefix=false
+ExecStartPre=@/usr/local/bin/wait-for-cpu-idle compose-wait-%i echo "Ready to start %i"
 EOF
   if echo "$dc" | grep -q ' '; then  # 'docker compose' case
     cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
 ExecStart=@$docker compose-%i compose up --no-color --remove-orphans
-ExecStop=@$docker compose-%i compose down
+ExecReload=@$docker compose-reload-%i compose up --no-color --remove-orphans -d --wait
+ExecStopPost=@$docker compose-stop-%i compose down
 EOF
   else  # legacy 'docker-compose' case
     cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
 ExecStart=@$dc compose-%i up --no-color --remove-orphans
-ExecStop=@$dc compose-%i down
+ExecReload=@$dc compose-reload-%i up --no-color --remove-orphans -d
+ExecStopPost=@$dc compose-stop-%i down
 EOF
   fi
   cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
 TimeoutStartSec=infinity
-Restart=on-failure
 RestartSec=5
 TimeoutStopSec=1min
 
@@ -259,6 +304,7 @@ while [ -n "$1" ]; do
 done
 case "$action" in
   install)
+    install_wait_for_cpu_idle
     install_template
     ;;
   update)
