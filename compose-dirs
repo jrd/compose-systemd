@@ -8,6 +8,12 @@ conf=/etc/compose-dirs.conf
 [ -n "$compose_dir" ] && [ -n "$compose_user" ] && [ -n "$tmpl_name" ] && [ -n "$deps_file" ] || exit 1
 [ -d "$compose_dir" ] || exit 1
 cd "$compose_dir"
+docker="$(which docker)"
+if "$docker" compose version | grep -q 'Docker Compose'; then
+  dc="$docker compose"
+else  # legacy
+  dc="$(which docker-compose)"
+fi
 usage() {
   cat <<EOF
 Version $version. By Cyrille Pontvieux, 2020-2021, MIT licence
@@ -36,10 +42,9 @@ install_template() {
   set -e
   # shellcheck disable=SC2046
   [ $(id -u) -eq 0 ]
-  dc=$(which docker-compose)
   cat > "/etc/systemd/system/$tmpl_name@.service" <<EOF
 [Unit]
-Description=Service for docker-compose in %I
+Description=Service for docker compose in %I
 BindsTo=docker.service
 After=docker.service
 
@@ -54,8 +59,19 @@ StandardError=journal
 SyslogIdentifier=compose-%i
 SyslogLevel=debug
 SyslogLevelPrefix=false
+EOF
+  if echo "$dc" | grep -q ' '; then  # 'docker compose' case
+    cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
+ExecStart=@$docker compose-%i compose up --no-color --remove-orphans
+ExecStop=@$docker compose-%i compose down
+EOF
+  else  # legacy 'docker-compose' case
+    cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
 ExecStart=@$dc compose-%i up --no-color --remove-orphans
 ExecStop=@$dc compose-%i down
+EOF
+  fi
+  cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
 TimeoutStartSec=infinity
 Restart=on-failure
 RestartSec=5
@@ -179,12 +195,12 @@ start() {
   [ $(id -u) -eq 0 ]
   if [ -n "$opts" ]; then
     for i in $opts; do
-      [ -n "$verbose" ] && echo "Starting $tmpl_name@$i" || true
+      [ -n "$verbose" ] && echo "Starting $tmpl_name@$i"
       systemctl start --no-block "$tmpl_name@$i.service"
     done
   else
     for i in $(find_order | cut -d: -f1 | xargs -I @ systemd-escape "@"); do
-      [ -n "$verbose" ] && echo "Starting $tmpl_name@$i" || true
+      [ -n "$verbose" ] && echo "Starting $tmpl_name@$i"
       systemctl start --no-block "$tmpl_name@$i.service"
     done
   fi
@@ -195,12 +211,12 @@ stop() {
   [ $(id -u) -eq 0 ]
   if [ -n "$opts" ]; then
     for i in $opts; do
-      [ -n "$verbose" ] && echo "Stopping $tmpl_name@$i" || true
+      [ -n "$verbose" ] && echo "Stopping $tmpl_name@$i"
       systemctl stop --no-block "$tmpl_name@$i.service"
     done
   else
     for i in $(find_order | cut -d: -f1 | xargs -I @ systemd-escape "@" | tac); do
-      [ -n "$verbose" ] && echo "Stopping $tmpl_name@$i" || true
+      [ -n "$verbose" ] && echo "Stopping $tmpl_name@$i"
       systemctl stop --no-block "$tmpl_name@$i.service"
     done
   fi
@@ -213,9 +229,9 @@ status() {
   fi
   [ -n "$verbose" ] && lines=10 || lines=0
   for i in $instances; do
-    systemctl status --no-pager --lines=$lines -o cat "$tmpl_name@$(systemd-escape "$i").service"
+    systemctl status --no-pager "--lines=$lines" -o cat "$tmpl_name@$(systemd-escape "$i").service"
     if [ -n "$verbose" ]; then
-      (cd "$compose_dir/$i" && docker-compose ps)
+      (cd "$compose_dir/$i" && $dc ps)
     fi
   done
 }
