@@ -44,7 +44,7 @@ install_wait_for_cpu_idle() {
   [ $(id -u) -eq 0 ]
   mkdir -p /usr/local/bin
   cat > /usr/local/bin/wait-for-cpu-idle <<'EOF'
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -u
 from os import execvp, cpu_count, getloadavg
 from random import randint
 from sys import argv, exit, stderr

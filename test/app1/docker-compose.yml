@@ -1,0 +1,16 @@
+# vim: set st=2 sts=2 sw=2 et:
+---
+version: "2.4"
+services:
+  svc1:
+    image: busybox
+    command:
+      - "sh"
+      - "-c"
+      - "while true; do sleep 1; echo -n 'Running app1 svc1: '; date; done"
+  svc2:
+    image: busybox
+    command:
+      - "sh"
+      - "-c"
+      - "while true; do sleep 1; echo -n 'Running app1 svc2: '; date; done"

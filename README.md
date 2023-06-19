@@ -23,7 +23,7 @@ By default, the following configuration is:
 Dependencies:
 * bash
 * systemd
-* docker-compose
+* docker with Compose v2 or docker-compose
 * python3
 * coreutils
 * findutils
@@ -77,3 +77,13 @@ Use `-h` or `--help` to get help.
 Use `-v` or `--verbose` to get verbose output.
 
 Use `-V` or `--version` to show compose-dirs version.
+
+
+Testing
+-------
+
+You can use `./testindocker` to install it in a temporary docker
+
+- Add `app1:` and `app2:` to `/etc/compose/compose.deps` file by using `docker exec` or a local `ssh` connection.
+- Install systemd services: `compose-dirs update`
+- Start them: `systemctl start compose@app1`, same for app2.
