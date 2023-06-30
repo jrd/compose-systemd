@@ -1,6 +1,6 @@
 #!/bin/bash
 # vim: set ts=2 sts=2 sw=2:
-version=1.6.0
+version=1.6.1
 conf=/etc/compose-dirs.conf
 [ -f "$conf" ] || exit 1
 # shellcheck disable=SC1090,SC1091
@@ -106,14 +106,14 @@ ExecStartPre=@/usr/local/bin/wait-for-cpu-idle compose-wait-%i echo "Ready to st
 EOF
   if echo "$dc" | grep -q ' '; then  # 'docker compose' case
     cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
-ExecStart=@$docker compose-%i compose up --no-color --remove-orphans
-ExecReload=@$docker compose-reload-%i compose up --no-color --remove-orphans -d --wait
+ExecStart=@$docker compose-%i compose up --no-color --build --remove-orphans
+ExecReload=@$docker compose-reload-%i compose up --no-color --build --remove-orphans -d --wait
 ExecStopPost=@$docker compose-stop-%i compose down
 EOF
   else  # legacy 'docker-compose' case
     cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
-ExecStart=@$dc compose-%i up --no-color --remove-orphans
-ExecReload=@$dc compose-reload-%i up --no-color --remove-orphans -d
+ExecStart=@$dc compose-%i up --no-color --build --remove-orphans
+ExecReload=@$dc compose-reload-%i up --no-color --build --remove-orphans -d
 ExecStopPost=@$dc compose-stop-%i down
 EOF
   fi
