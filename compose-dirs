@@ -1,6 +1,6 @@
 #!/bin/bash
 # vim: set ts=2 sts=2 sw=2:
-version=1.5.0
+version=1.6.0
 conf=/etc/compose-dirs.conf
 [ -f "$conf" ] || exit 1
 # shellcheck disable=SC1090,SC1091
@@ -26,7 +26,7 @@ OPTIONS:
 ACTION:
   install: install compose-dirs on the system
   update [service]: update systemd unit files (or just the service provided)
-  start, stop, restart, status [service]: do the acton on all (or only provided service) systemd unit files
+  start, stop, reload, restart, status [service]: do the acton on all (or only provided service) systemd unit files
 
 CONFIG:
   compose directory: $compose_dir
@@ -266,6 +266,22 @@ stop() {
     done
   fi
 }
+reload() {
+  set -e
+  # shellcheck disable=SC2046
+  [ $(id -u) -eq 0 ]
+  if [ -n "$opts" ]; then
+    for i in $opts; do
+      [ -n "$verbose" ] && echo "Reloading $tmpl_name@$i"
+      systemctl reload --no-block "$tmpl_name@$i.service"
+    done
+  else
+    for i in $(find_order | cut -d: -f1 | xargs -I @ systemd-escape "@" | tac); do
+      [ -n "$verbose" ] && echo "Reloading $tmpl_name@$i"
+      systemctl reload --no-block "$tmpl_name@$i.service"
+    done
+  fi
+}
 status() {
   if [ -n "$opts" ]; then
     instances="$opts"
@@ -315,6 +331,9 @@ case "$action" in
     ;;
   stop)
     stop
+    ;;
+  reload)
+    reload
     ;;
   restart)
     stop
