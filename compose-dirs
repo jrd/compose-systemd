@@ -16,7 +16,7 @@ else  # legacy
 fi
 usage() {
   cat <<EOF
-Version $version. By Cyrille Pontvieux, 2020-2023, MIT licence
+Version $version. By Cyrille Pontvieux, 2020-2025, MIT licence
 
 compose-dirs install OPTIONS ACTION [OPTS]
 OPTIONS:
@@ -118,9 +118,10 @@ ExecStopPost=@$dc compose-stop-%i down
 EOF
   fi
   cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
+TimeoutSec=30 # default timeout, used with reload action
 TimeoutStartSec=infinity
-RestartSec=5
 TimeoutStopSec=1min
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
