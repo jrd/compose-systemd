@@ -1,0 +1,19 @@
+.publish:
+  stage: publish
+  rules:
+    - if: '$CI_COMMIT_TAG && $CI_COMMIT_TAG =~ /v\d+\.\d+\.\d+/'
+  image: alpine
+  before_script:
+    - apk add curl
+  script:
+    - |
+      ver=$(echo "$CI_COMMIT_TAG" | sed -r 's/^v//')
+      archive="${CI_PROJECT_NAME}-${ver}.tar.xz"
+      tar caf $archive \
+        compose-systemd compose-systemd.conf README.md LICENSE
+      curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$archive" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${CI_PROJECT_NAME}/${ver}/${archive}"
+  artifacts:
+    paths:
+      - '*.tar.xz'
+    expire_in: 1 hour

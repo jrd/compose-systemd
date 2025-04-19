@@ -1,10 +1,17 @@
 #!/bin/bash
 # vim: set ts=2 sts=2 sw=2:
 version=1.6.2
-conf=/etc/compose-dirs.conf
-[ -f "$conf" ] || exit 1
-# shellcheck disable=SC1090,SC1091
-. "$conf"
+conf=/etc/compose-systemd.conf
+conf_old=/etc/compose-dirs.conf
+if [ -f "$conf" ]; then
+  # shellcheck disable=SC1090,SC1091
+  . "$conf"
+elif [ -f "$conf_old" ]; then
+  # shellcheck disable=SC1090,SC1091
+  . "$conf_old"
+else
+  exit 1
+fi
 [ -n "$compose_dir" ] && [ -n "$compose_user" ] && [ -n "$tmpl_name" ] && [ -n "$deps_file" ] || exit 1
 [ -d "$compose_dir" ] || exit 1
 cd "$compose_dir"
@@ -18,13 +25,13 @@ usage() {
   cat <<EOF
 Version $version. By Cyrille Pontvieux, 2020-2025, MIT licence
 
-compose-dirs install OPTIONS ACTION [OPTS]
+compose-systemd install OPTIONS ACTION [OPTS]
 OPTIONS:
   -h, --help: this help message
   -V, --version: show version
   -v, --verbose: verbose output
 ACTION:
-  install: install compose-dirs on the system
+  install: install compose-systemd on the system
   update [service]: update systemd unit files (or just the service provided)
   start, stop, reload, restart, status [service]: do the acton on all (or only provided service) systemd unit files
 

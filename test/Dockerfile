@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.2
+# syntax=docker/dockerfile:1
 FROM debian:12
 VOLUME /var/lib/docker
 RUN apt-get update \
@@ -29,9 +29,9 @@ RUN apt-get install -y \
         vim
 RUN sed -ri '/#PermitRootLogin/a PermitRootLogin yes\n' /etc/ssh/sshd_config \
  && echo 'root:root' | chpasswd
-COPY compose-dirs /usr/local/bin/
-COPY compose-dirs.conf /etc/
-RUN sed -ri 's/compose_user=.*/compose_user=root/' /etc/compose-dirs.conf
+COPY compose-systemd /usr/local/bin/
+COPY compose-systemd.conf /etc/
+RUN sed -ri 's/compose_user=.*/compose_user=root/' /etc/compose-systemd.conf
 COPY docker-entrypoint /usr/local/bin/docker-entrypoint
 COPY app1 /etc/compose/app1
 COPY app2 /etc/compose/app2

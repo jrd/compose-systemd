@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 (
-    cp compose-dirs* test/
-    cd test
-    DOCKER_BUILDKIT=1 docker build --network host -t composetest .
-    rm compose-dirs*
+  cp compose-systemd* test/
+  cd test
+  DOCKER_BUILDKIT=1 docker build --network host -t composetest .
+  rm compose-systemd*
 )
 cat <<'EOF'
-`compose-dirs` will run in a container.
+`compose-systemd` will run in a container.
 You can reach the container with `docker exec -ti composetest /bin/bash`.
 `tmux` is available in the container so feel free to use it.
 
@@ -19,14 +19,14 @@ Password is root
 EOF
 trap 'docker kill composetest; docker rmi composetest' EXIT
 docker run \
-    --name composetest \
-    --rm \
-    --privileged \
-    -p 1022:22 \
-    -d \
-    composetest
+  --name composetest \
+  --rm \
+  --privileged \
+  -p 1022:22 \
+  -d \
+  composetest
 echo "Wait for systemd to start"
 sleep 1
 docker exec -t composetest systemctl enable --now ssh
-docker exec -t composetest /usr/local/bin/compose-dirs install
+docker exec -t composetest /usr/local/bin/compose-systemd install
 docker logs -f composetest

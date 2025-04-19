@@ -1,5 +1,5 @@
-compose-dirs
-============
+compose-systemd
+===============
 
 This script is used to install and manage docker compose projects with systemd.
 
@@ -10,9 +10,9 @@ This can be used to automatically start the different compose services in the co
 Configuration
 -------------
 
-You need to copy `compose-dirs.conf` in `/etc/` and `compose-dirs` in `/usr/local/bin/` or any directory in your `PATH`
+You need to copy `compose-systemd.conf` in `/etc/` and `compose-systemd` in `/usr/local/bin/` or any directory in your `PATH`
 
-Edit `/etc/compose-dirs.conf` file to adjust configuration to your liking.
+Edit `/etc/compose-systemd.conf` file to adjust configuration to your liking.
 
 By default, the following configuration is:
 * compose directory: `/etc/compose`
@@ -46,7 +46,7 @@ Installation
 
 Install the Systemd service template:
 ```
-compose-dirs install
+compose-systemd install
 ```
 
 Usage
@@ -54,20 +54,20 @@ Usage
 
 Every time you modify a compose project or a dependency, just run:
 ```
-compose-dirs update
+compose-systemd update
 ```
 or run:
 ```
-compose-dirs update your_application
+compose-systemd update your_application
 ```
 
 You can then start the whole chain with:
 ```
-compose-dirs start
+compose-systemd start
 ```
 Or just your application with:
 ```
-compose-dirs start your_application
+compose-systemd start your_application
 ```
 
 There are also `stop`, `restart` and `status` commands.
@@ -76,7 +76,7 @@ Use `-h` or `--help` to get help.
 
 Use `-v` or `--verbose` to get verbose output.
 
-Use `-V` or `--version` to show compose-dirs version.
+Use `-V` or `--version` to show compose-systemd version.
 
 
 Testing
@@ -85,5 +85,5 @@ Testing
 You can use `./testindocker` to install it in a temporary docker
 
 - Add `app1:` and `app2:` to `/etc/compose/compose.deps` file by using `docker exec` or a local `ssh` connection.
-- Install systemd services: `compose-dirs update`
+- Install systemd services: `compose-systemd update`
 - Start them: `systemctl start compose@app1`, same for app2.
