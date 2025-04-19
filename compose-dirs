@@ -107,7 +107,7 @@ EOF
   if echo "$dc" | grep -q ' '; then  # 'docker compose' case
     cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
 ExecStart=@$docker compose-%i compose up --no-color --build --remove-orphans
-ExecReload=@$docker compose-reload-%i compose up --no-color --build --remove-orphans -d --wait
+ExecReload=@$docker compose-reload-%i compose up --no-color --build --remove-orphans -d --wait --wait-timeout=30
 ExecStopPost=@$docker compose-stop-%i compose down
 EOF
   else  # legacy 'docker-compose' case
@@ -118,7 +118,7 @@ ExecStopPost=@$dc compose-stop-%i down
 EOF
   fi
   cat >> "/etc/systemd/system/$tmpl_name@.service" <<EOF
-TimeoutSec=30 # default timeout, used with reload action
+TimeoutSec=30
 TimeoutStartSec=infinity
 TimeoutStopSec=1min
 RestartSec=5
