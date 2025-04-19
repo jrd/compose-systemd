@@ -1,6 +1,6 @@
 #!/bin/bash
 # vim: set ts=2 sts=2 sw=2:
-version=1.6.2
+version=1.7.0
 conf=/etc/compose-systemd.conf
 conf_old=/etc/compose-dirs.conf
 if [ -f "$conf" ]; then
